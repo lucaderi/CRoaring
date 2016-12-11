@@ -29,7 +29,7 @@ int test_printf() {
     return 1;
 }
 
-void dummy_iterator(uint32_t value, void *param) {
+void dummy_iterator(uint32_t value /* NOTUSED */, void *param) {
   uint32_t *num = (uint32_t*)param;
   
   (*num)++;

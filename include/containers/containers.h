@@ -24,7 +24,7 @@
 /**
  * Get the container name from the typecode
  */
-static inline char *get_container_name(uint8_t typecode) {
+static inline const char *get_container_name(uint8_t typecode) {
     switch (typecode) {
         case BITSET_CONTAINER_TYPE_CODE:
             return "bitset";
@@ -42,11 +42,11 @@ static inline char *get_container_name(uint8_t typecode) {
 static inline int container_get_cardinality(void *container, uint8_t typecode) {
     switch (typecode) {
         case BITSET_CONTAINER_TYPE_CODE:
-            return bitset_container_cardinality(container);
+	  return bitset_container_cardinality((bitset_container_t*)container);
         case ARRAY_CONTAINER_TYPE_CODE:
-            return array_container_cardinality(container);
+	  return array_container_cardinality((array_container_t*)container);
         case RUN_CONTAINER_TYPE_CODE:
-            return run_container_cardinality(container);
+	  return run_container_cardinality((run_container_t*)container);
     }
     return 0;  // unreached
 }
@@ -70,11 +70,11 @@ static inline bool container_nonzero_cardinality(void *container,
                                                  uint8_t typecode) {
     switch (typecode) {
         case BITSET_CONTAINER_TYPE_CODE:
-            return bitset_container_nonzero_cardinality(container);
+	  return bitset_container_nonzero_cardinality((bitset_container_t*)container);
         case ARRAY_CONTAINER_TYPE_CODE:
-            return array_container_nonzero_cardinality(container);
+	  return array_container_nonzero_cardinality((array_container_t*)container);
         case RUN_CONTAINER_TYPE_CODE:
-            return run_container_nonzero_cardinality(container);
+	  return run_container_nonzero_cardinality((run_container_t*)container);
     }
     return 0;  // unreached
 }
@@ -106,11 +106,11 @@ static inline int container_to_uint32_array(uint32_t *output, void *container,
                                             uint8_t typecode, uint32_t base) {
     switch (typecode) {
         case BITSET_CONTAINER_TYPE_CODE:
-            return bitset_container_to_uint32_array(output, container, base);
+	  return bitset_container_to_uint32_array(output, (bitset_container_t *)container, base);
         case ARRAY_CONTAINER_TYPE_CODE:
-            return array_container_to_uint32_array(output, container, base);
+	  return array_container_to_uint32_array(output, (array_container_t *)container, base);
         case RUN_CONTAINER_TYPE_CODE:
-            return run_container_to_uint32_array(output, container, base);
+	  return run_container_to_uint32_array(output, (run_container_t *)container, base);
     }
     __builtin_unreachable();
     return 0;  // unreached
@@ -130,16 +130,17 @@ static inline void *container_add(void *container, uint16_t val,
             *new_typecode = BITSET_CONTAINER_TYPE_CODE;
             return container;
         case ARRAY_CONTAINER_TYPE_CODE:
-            ;
+	  {
             array_container_t *ac = (array_container_t *)container;
             array_container_add(ac, val);
             if (array_container_cardinality(ac) > DEFAULT_MAX_SIZE) {
-                *new_typecode = BITSET_CONTAINER_TYPE_CODE;
-                return bitset_container_from_array(ac);
+	      *new_typecode = BITSET_CONTAINER_TYPE_CODE;
+	      return bitset_container_from_array(ac);
             } else {
-                *new_typecode = ARRAY_CONTAINER_TYPE_CODE;
-                return ac;
+	      *new_typecode = ARRAY_CONTAINER_TYPE_CODE;
+	      return ac;
             }
+	  }
         case RUN_CONTAINER_TYPE_CODE:
             // per Java, no container type adjustments are done (revisit?)
             run_container_add((run_container_t *)container, val);
@@ -235,31 +236,31 @@ static inline void *container_and(void *c1, uint8_t type1, void *c2,
     switch (CONTAINER_PAIR(type1, type2)) {
         case CONTAINER_PAIR(BITSET_CONTAINER_TYPE_CODE,
                             BITSET_CONTAINER_TYPE_CODE):
-            *result_type = bitset_bitset_container_intersection(c1, c2, &result)
+	  *result_type = bitset_bitset_container_intersection((bitset_container_t *)c1, (bitset_container_t *)c2, &result)
                                ? BITSET_CONTAINER_TYPE_CODE
                                : ARRAY_CONTAINER_TYPE_CODE;
             return result;
         case CONTAINER_PAIR(ARRAY_CONTAINER_TYPE_CODE,
                             ARRAY_CONTAINER_TYPE_CODE):
             result = array_container_create();
-            array_container_intersection(c1, c2, result);
+            array_container_intersection((const array_container_t *)c1, (const array_container_t *)c2, (array_container_t*)result);
             *result_type = ARRAY_CONTAINER_TYPE_CODE;  // never bitset
             return result;
         case CONTAINER_PAIR(RUN_CONTAINER_TYPE_CODE, RUN_CONTAINER_TYPE_CODE):
             result = run_container_create();
-            run_container_intersection(c1, c2, result);
-            return convert_run_to_efficient_container(result, result_type);
+            run_container_intersection((const run_container_t *)c1, (const run_container_t *)c2, (run_container_t*)result);
+            return convert_run_to_efficient_container((run_container_t*)result, result_type);
         case CONTAINER_PAIR(BITSET_CONTAINER_TYPE_CODE,
                             ARRAY_CONTAINER_TYPE_CODE):
             result = array_container_create();
-            array_bitset_container_intersection(c2, c1, result);
+            array_bitset_container_intersection((const array_container_t *)c2, (const bitset_container_t *)c1, (array_container_t*)result);
             *result_type = ARRAY_CONTAINER_TYPE_CODE;  // never bitset
             return result;
         case CONTAINER_PAIR(ARRAY_CONTAINER_TYPE_CODE,
                             BITSET_CONTAINER_TYPE_CODE):
             result = array_container_create();
             *result_type = ARRAY_CONTAINER_TYPE_CODE;  // never bitset
-            array_bitset_container_intersection(c1, c2, result);
+            array_bitset_container_intersection((const array_container_t *)c1, (const bitset_container_t *)c2, (array_container_t*)result);
             return result;
 #if 0
         case CONTAINER_PAIR(BITSET_CONTAINER_TYPE_CODE, RUN_CONTAINER_TYPE_CODE):
@@ -291,33 +292,33 @@ static inline void *container_iand(void *c1, uint8_t type1, void *c2,
         case CONTAINER_PAIR(BITSET_CONTAINER_TYPE_CODE,
                             BITSET_CONTAINER_TYPE_CODE):
             *result_type =
-                bitset_bitset_container_intersection_inplace(c1, c2, &result)
+	      bitset_bitset_container_intersection_inplace((bitset_container_t *)c1, (bitset_container_t *)c2, &result)
                     ? BITSET_CONTAINER_TYPE_CODE
                     : ARRAY_CONTAINER_TYPE_CODE;
             return result;
         case CONTAINER_PAIR(ARRAY_CONTAINER_TYPE_CODE,
                             ARRAY_CONTAINER_TYPE_CODE):
-            array_container_intersection_inplace(c1, c2);
+	  array_container_intersection_inplace((array_container_t *)c1, (const array_container_t *)c2);
             *result_type = ARRAY_CONTAINER_TYPE_CODE;
             return c1;
         case CONTAINER_PAIR(RUN_CONTAINER_TYPE_CODE, RUN_CONTAINER_TYPE_CODE):
             result = run_container_create();
-            run_container_intersection(c1, c2, result);
+            run_container_intersection((const run_container_t *)c1, (const run_container_t *)c2, (run_container_t*)result);
             // as of January 2016, Java code used non-in-place intersection for
             // two runcontainers
-            return convert_run_to_efficient_container(result, result_type);
+            return convert_run_to_efficient_container((run_container_t*)result, result_type);
         case CONTAINER_PAIR(BITSET_CONTAINER_TYPE_CODE,
                             ARRAY_CONTAINER_TYPE_CODE):
             // c1 is a bitmap so no inplace possible
             result = array_container_create();
-            array_bitset_container_intersection(c2, c1, result);
-            bitset_container_free(c1);
+            array_bitset_container_intersection((const array_container_t *)c2, (const bitset_container_t *)c1, (array_container_t*)result);
+            bitset_container_free((bitset_container_t*)c1);
             *result_type = ARRAY_CONTAINER_TYPE_CODE;  // never bitset
             return result;
         case CONTAINER_PAIR(ARRAY_CONTAINER_TYPE_CODE,
                             BITSET_CONTAINER_TYPE_CODE):
             *result_type = ARRAY_CONTAINER_TYPE_CODE;  // never bitset
-            array_bitset_container_intersection(c1, c2, c1);
+            array_bitset_container_intersection((const array_container_t  *)c1, (const bitset_container_t *)c2, (array_container_t *)c1);
             return c1;
 #if 0
         case CONTAINER_PAIR(BITSET_CONTAINER_TYPE_CODE, RUN_CONTAINER_TYPE_CODE):
@@ -348,32 +349,32 @@ static inline void *container_or(void *c1, uint8_t type1, void *c2,
         case CONTAINER_PAIR(BITSET_CONTAINER_TYPE_CODE,
                             BITSET_CONTAINER_TYPE_CODE):
             result = bitset_container_create();
-            bitset_container_or(c1, c2, result);
+            bitset_container_or((const bitset_container_t *)c1, (const bitset_container_t *)c2, (bitset_container_t*)result);
             *result_type = BITSET_CONTAINER_TYPE_CODE;
             return result;
         case CONTAINER_PAIR(ARRAY_CONTAINER_TYPE_CODE,
                             ARRAY_CONTAINER_TYPE_CODE):
-            *result_type = array_array_container_union(c1, c2, &result)
+	  *result_type = array_array_container_union((const array_container_t*)c1, (const array_container_t*)c2, &result)
                                ? BITSET_CONTAINER_TYPE_CODE
                                : ARRAY_CONTAINER_TYPE_CODE;
             return result;
         case CONTAINER_PAIR(RUN_CONTAINER_TYPE_CODE, RUN_CONTAINER_TYPE_CODE):
             result = run_container_create();
             // TODO: this is not correct
-            run_container_union(c1, c2, result);
+            run_container_union((const run_container_t*)c1, (const run_container_t*)c2, (run_container_t*)result);
             *result_type = RUN_CONTAINER_TYPE_CODE;
             // ToDo, conversion to bitset or array
             return result;
         case CONTAINER_PAIR(BITSET_CONTAINER_TYPE_CODE,
                             ARRAY_CONTAINER_TYPE_CODE):
             result = bitset_container_create();
-            array_bitset_container_union(c2, c1, result);
+            array_bitset_container_union((const array_container_t *)c2, (const bitset_container_t *)c1, (bitset_container_t*)result);
             *result_type = BITSET_CONTAINER_TYPE_CODE;
             return result;
         case CONTAINER_PAIR(ARRAY_CONTAINER_TYPE_CODE,
                             BITSET_CONTAINER_TYPE_CODE):
             result = bitset_container_create();
-            array_bitset_container_union(c1, c2, result);
+            array_bitset_container_union((const array_container_t *)c1, (const bitset_container_t *)c2, (bitset_container_t*)result);
             *result_type = BITSET_CONTAINER_TYPE_CODE;
             return result;
 #if 0
@@ -402,24 +403,24 @@ static inline void *container_ior(void *c1, uint8_t type1, void *c2,
     switch (CONTAINER_PAIR(type1, type2)) {
         case CONTAINER_PAIR(BITSET_CONTAINER_TYPE_CODE,
                             BITSET_CONTAINER_TYPE_CODE):
-            bitset_container_or(c1, c2, c1);
+	  bitset_container_or((const bitset_container_t *)c1, (const bitset_container_t *)c2, (bitset_container_t *)c1);
             *result_type = BITSET_CONTAINER_TYPE_CODE;
             return c1;
         case CONTAINER_PAIR(ARRAY_CONTAINER_TYPE_CODE,
                             ARRAY_CONTAINER_TYPE_CODE):
             // Java impl. also does not do real in-place in this case
-            *result_type = array_array_container_union(c1, c2, &result)
+	  *result_type = array_array_container_union((array_container_t*)c1, (const array_container_t*)c2, &result)
                                ? BITSET_CONTAINER_TYPE_CODE
                                : ARRAY_CONTAINER_TYPE_CODE;
             return result;
         case CONTAINER_PAIR(RUN_CONTAINER_TYPE_CODE, RUN_CONTAINER_TYPE_CODE):
             result = run_container_create();
             // TODO: write in-place run container union
-            run_container_union(c1, c2, result);
-            return convert_run_to_efficient_container(result, result_type);
+            run_container_union((const run_container_t*)c1, (const run_container_t*)c2, (run_container_t*)result);
+            return convert_run_to_efficient_container((run_container_t*)result, result_type);
         case CONTAINER_PAIR(BITSET_CONTAINER_TYPE_CODE,
                             ARRAY_CONTAINER_TYPE_CODE):
-            array_bitset_container_union(c2, c1, c1);
+	  array_bitset_container_union((const array_container_t*)c2, (const bitset_container_t*)c1, (bitset_container_t*)c1);
             *result_type = BITSET_CONTAINER_TYPE_CODE;  // never array
             return c1;
         case CONTAINER_PAIR(ARRAY_CONTAINER_TYPE_CODE,
@@ -427,8 +428,8 @@ static inline void *container_ior(void *c1, uint8_t type1, void *c2,
             // c1 is an array, so no in-place possible
             result = bitset_container_create();
             *result_type = BITSET_CONTAINER_TYPE_CODE;
-            array_bitset_container_union(c1, c2, result);
-            array_container_free(c1);
+            array_bitset_container_union((const array_container_t *)c1, (const bitset_container_t *)c2, (bitset_container_t *)result);
+            array_container_free((array_container_t *)c1);
             return result;
 #if 0
         case CONTAINER_PAIR(BITSET_CONTAINER_TYPE_CODE, RUN_CONTAINER_TYPE_CODE):
@@ -451,13 +452,13 @@ static inline void container_iterate(void *container, uint8_t typecode, uint32_t
 				     roaring_iterator iterator, void *ptr) {
     switch (typecode) {
         case BITSET_CONTAINER_TYPE_CODE:
-	   bitset_container_iterate(container, base, iterator, ptr);
+	  bitset_container_iterate((const bitset_container_t *)container, base, iterator, ptr);
 	   break;
         case ARRAY_CONTAINER_TYPE_CODE:
-	  array_container_iterate(container, base, iterator, ptr);
+	  array_container_iterate((const array_container_t*)container, base, iterator, ptr);
 	   break;
         case RUN_CONTAINER_TYPE_CODE:
-	   run_container_iterate(container, base, iterator, ptr);
+	  run_container_iterate((const run_container_t*)container, base, iterator, ptr);
 	   break;	   
     default:
       __builtin_unreachable();
